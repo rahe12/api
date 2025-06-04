@@ -1,8 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
-const studentRoutes = require('./routes/students');
-const timetableRoutes = require('./routes/timetable');
+const adminRoutes = require('./routes/admin');
+const newsRoutes = require('./routes/news');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,16 +10,16 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // Routes
-app.use('/students', studentRoutes);
-app.use('/timetable', timetableRoutes);
+app.use('/admin', adminRoutes);
+app.use('/news', newsRoutes);
 
-// Swagger documentation (optional - can expand later)
+// Swagger documentation
 const swaggerDocument = {
   openapi: '3.0.3',
   info: {
-    title: 'Student and Timetable API',
+    title: 'Admin and News API',
     version: '1.0.0',
-    description: 'API for managing students and timetable with JWT authentication',
+    description: 'API for managing admin users and news with JWT authentication',
   },
   servers: [{ url: `http://localhost:${PORT}` }],
   components: {
@@ -29,71 +29,115 @@ const swaggerDocument = {
   },
   security: [{ bearerAuth: [] }],
   paths: {
-    '/students/register': {
+    '/admin/register': {
       post: {
-        summary: 'Register a new student',
+        summary: 'Register a new admin',
         requestBody: {
           required: true,
           content: {
             'application/json': {
-              schema: { type: 'object', properties: { name: { type: 'string' }, email: { type: 'string' }, password: { type: 'string' } }, required: ['name', 'email', 'password'] },
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  email: { type: 'string' },
+                  password: { type: 'string' },
+                },
+                required: ['name', 'email', 'password'],
+              },
             },
           },
         },
-        responses: { '201': { description: 'Created' }, '400': { description: 'Bad Request' } },
+        responses: {
+          '201': { description: 'Created' },
+          '400': { description: 'Bad Request' },
+        },
       },
     },
-    '/students/login': {
+    '/admin/login': {
       post: {
-        summary: 'Login student',
+        summary: 'Login admin',
         requestBody: {
           required: true,
           content: {
             'application/json': {
-              schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' } }, required: ['email', 'password'] },
+              schema: {
+                type: 'object',
+                properties: {
+                  email: { type: 'string' },
+                  password: { type: 'string' },
+                },
+                required: ['email', 'password'],
+              },
             },
           },
         },
-        responses: { '200': { description: 'JWT token' }, '401': { description: 'Unauthorized' } },
+        responses: {
+          '200': { description: 'JWT token' },
+          '401': { description: 'Unauthorized' },
+        },
       },
     },
-    '/students': {
+    '/admin': {
       get: {
-        summary: 'Get all students (admin only)',
+        summary: 'Get all admins (admin only)',
         security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'List of students' }, '403': { description: 'Forbidden' } },
+        responses: {
+          '200': { description: 'List of admins' },
+          '403': { description: 'Forbidden' },
+        },
       },
     },
-    '/students/{id}': {
+    '/admin/{id}': {
       get: {
-        summary: 'Get student by ID',
+        summary: 'Get admin by ID',
         security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
-        responses: { '200': { description: 'Student data' }, '403': { description: 'Forbidden' }, '404': { description: 'Not found' } },
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+        ],
+        responses: {
+          '200': { description: 'Admin data' },
+          '403': { description: 'Forbidden' },
+          '404': { description: 'Not found' },
+        },
       },
       put: {
-        summary: 'Update student by ID',
+        summary: 'Update admin by ID',
         security: [{ bearerAuth: [] }],
-        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
+        ],
         requestBody: {
           required: true,
           content: {
             'application/json': {
-              schema: { type: 'object', properties: { name: { type: 'string' }, email: { type: 'string' }, password: { type: 'string' } } },
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  email: { type: 'string' },
+                  password: { type: 'string' },
+                },
+              },
             },
           },
         },
-        responses: { '200': { description: 'Updated student' }, '403': { description: 'Forbidden' } },
+        responses: {
+          '200': { description: 'Updated admin' },
+          '403': { description: 'Forbidden' },
+        },
       },
     },
-    '/timetable': {
+    '/news': {
       get: {
-        summary: 'List all timetable entries',
+        summary: 'List all news entries',
         security: [{ bearerAuth: [] }],
-        responses: { '200': { description: 'List of timetable entries' } },
+        responses: {
+          '200': { description: 'List of news entries' },
+        },
       },
       post: {
-        summary: 'Add timetable entry (admin only)',
+        summary: 'Add news entry (admin only)',
         security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
@@ -102,17 +146,19 @@ const swaggerDocument = {
               schema: {
                 type: 'object',
                 properties: {
-                  course: { type: 'string' },
-                  day: { type: 'string', enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
-                  start_time: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
-                  end_time: { type: 'string', pattern: '^\\d{2}:\\d{2}$' },
+                  title: { type: 'string' },
+                  content: { type: 'string' },
+                  published_at: { type: 'string', format: 'date-time' },
                 },
-                required: ['course', 'day', 'start_time', 'end_time'],
+                required: ['title', 'content', 'published_at'],
               },
             },
           },
         },
-        responses: { '201': { description: 'Created timetable entry' }, '403': { description: 'Forbidden' } },
+        responses: {
+          '201': { description: 'Created news entry' },
+          '403': { description: 'Forbidden' },
+        },
       },
     },
   },
@@ -122,7 +168,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Root route
 app.get('/', (req, res) => {
-  res.send('Welcome to the Student and Timetable API');
+  res.send('Welcome to the Admin and News API');
 });
 
 app.listen(PORT, () => {
