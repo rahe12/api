@@ -10,34 +10,32 @@ const fs = require('fs');
 const app = express();
 app.use(express.json());
 
-// Setup Multer storage for image uploads
+// Static file hosting for uploaded images
+const UPLOAD_DIR = path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(UPLOAD_DIR));
+
+// Multer config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, 'uploads');
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-    cb(null, uploadDir);
+    if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
+    cb(null, UPLOAD_DIR);
   },
   filename: (req, file, cb) => {
-    // Unique filename: timestamp-originalName with spaces replaced by underscores
     const uniqueName = `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`;
     cb(null, uniqueName);
   },
 });
 const upload = multer({ storage });
 
-// Serve static files from /uploads folder
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Setup PostgreSQL connection pool using DATABASE_URL from env
+// PostgreSQL setup
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// Middleware: Verify JWT token and protect routes
+// Middleware to authenticate JWT tokens
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  if (!authHeader)
-    return res.status(401).json({ message: 'Authorization header missing' });
+  if (!authHeader) return res.status(401).json({ message: 'Authorization header missing' });
 
   const token = authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'Token missing' });
@@ -49,7 +47,7 @@ function authenticateToken(req, res, next) {
   });
 }
 
-// Initialize DB tables and create default admin if none exists
+// DB initialization
 async function initializeDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admins (
@@ -80,9 +78,9 @@ async function initializeDB() {
   }
 }
 
-// ROUTES
+// ========== ROUTES ==========
 
-// Admin login - returns JWT token
+// Login (admin)
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
@@ -91,10 +89,9 @@ app.post('/api/login', async (req, res) => {
   try {
     const { rows } = await pool.query('SELECT * FROM admins WHERE username=$1', [username]);
     const admin = rows[0];
-    if (!admin) return res.status(401).json({ message: 'Invalid credentials' });
-
-    const isPasswordValid = await bcrypt.compare(password, admin.password);
-    if (!isPasswordValid) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!admin || !(await bcrypt.compare(password, admin.password))) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
 
     const token = jwt.sign(
       { id: admin.id, username: admin.username },
@@ -109,16 +106,37 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Create news post with optional image upload
+// Public - View all news
+app.get('/api/news', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM news ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (err) {
+    console.error('Get news error:', err);
+    res.status(500).json({ message: 'Failed to retrieve news' });
+  }
+});
+
+// Public - View single news item
+app.get('/api/news/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query('SELECT * FROM news WHERE id=$1', [id]);
+    if (rows.length === 0) return res.status(404).json({ message: 'News not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Get news by ID error:', err);
+    res.status(500).json({ message: 'Failed to retrieve news' });
+  }
+});
+
+// Admin - Create news
 app.post('/api/news', authenticateToken, upload.single('image'), async (req, res) => {
   const { title, content } = req.body;
   if (!title || !content)
-    return res.status(400).json({ message: 'Title and content are required' });
+    return res.status(400).json({ message: 'Title and content required' });
 
-  let imageUrl = null;
-  if (req.file) {
-    imageUrl = `/uploads/${req.file.filename}`;
-  }
+  const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
   try {
     const { rows } = await pool.query(
@@ -132,46 +150,20 @@ app.post('/api/news', authenticateToken, upload.single('image'), async (req, res
   }
 });
 
-// Get all news posts
-app.get('/api/news', authenticateToken, async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT * FROM news ORDER BY created_at DESC');
-    res.json(rows);
-  } catch (err) {
-    console.error('Get news error:', err);
-    res.status(500).json({ message: 'Failed to get news' });
-  }
-});
-
-// Get single news post by ID
-app.get('/api/news/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  try {
-    const { rows } = await pool.query('SELECT * FROM news WHERE id=$1', [id]);
-    if (rows.length === 0) return res.status(404).json({ message: 'News not found' });
-    res.json(rows[0]);
-  } catch (err) {
-    console.error('Get news by ID error:', err);
-    res.status(500).json({ message: 'Failed to get news' });
-  }
-});
-
-// Update news post by ID, optional new image upload
+// Admin - Update news
 app.put('/api/news/:id', authenticateToken, upload.single('image'), async (req, res) => {
   const { id } = req.params;
   const { title, content } = req.body;
 
   if (!title || !content)
-    return res.status(400).json({ message: 'Title and content are required' });
+    return res.status(400).json({ message: 'Title and content required' });
 
   try {
-    // Check if news exists
     const { rows } = await pool.query('SELECT * FROM news WHERE id=$1', [id]);
     if (rows.length === 0) return res.status(404).json({ message: 'News not found' });
 
     let imageUrl = rows[0].image_url;
 
-    // If new image uploaded, delete old image and update path
     if (req.file) {
       if (imageUrl) {
         const oldImagePath = path.join(__dirname, imageUrl);
@@ -194,7 +186,7 @@ app.put('/api/news/:id', authenticateToken, upload.single('image'), async (req, 
   }
 });
 
-// Delete news post by ID and delete image file if exists
+// Admin - Delete news
 app.delete('/api/news/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
@@ -218,7 +210,7 @@ app.delete('/api/news/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Start server after DB init
+// Start server
 const PORT = process.env.PORT || 3000;
 initializeDB()
   .then(() => {
