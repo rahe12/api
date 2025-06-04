@@ -1,176 +1,231 @@
 require('dotenv').config();
 const express = require('express');
-const swaggerUi = require('swagger-ui-express');
-const adminRoutes = require('./routes/admin');
-const newsRoutes = require('./routes/news');
+const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(express.json());
 
-// Routes
-app.use('/admin', adminRoutes);
-app.use('/news', newsRoutes);
-
-// Swagger documentation
-const swaggerDocument = {
-  openapi: '3.0.3',
-  info: {
-    title: 'Admin and News API',
-    version: '1.0.0',
-    description: 'API for managing admin users and news with JWT authentication',
+// Setup Multer storage for image uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
+    cb(null, uploadDir);
   },
-  servers: [{ url: `http://localhost:${PORT}` }],
-  components: {
-    securitySchemes: {
-      bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-    },
+  filename: (req, file, cb) => {
+    // Unique filename: timestamp-originalName with spaces replaced by underscores
+    const uniqueName = `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`;
+    cb(null, uniqueName);
   },
-  security: [{ bearerAuth: [] }],
-  paths: {
-    '/admin/register': {
-      post: {
-        summary: 'Register a new admin',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  email: { type: 'string' },
-                  password: { type: 'string' },
-                },
-                required: ['name', 'email', 'password'],
-              },
-            },
-          },
-        },
-        responses: {
-          '201': { description: 'Created' },
-          '400': { description: 'Bad Request' },
-        },
-      },
-    },
-    '/admin/login': {
-      post: {
-        summary: 'Login admin',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  email: { type: 'string' },
-                  password: { type: 'string' },
-                },
-                required: ['email', 'password'],
-              },
-            },
-          },
-        },
-        responses: {
-          '200': { description: 'JWT token' },
-          '401': { description: 'Unauthorized' },
-        },
-      },
-    },
-    '/admin': {
-      get: {
-        summary: 'Get all admins (admin only)',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          '200': { description: 'List of admins' },
-          '403': { description: 'Forbidden' },
-        },
-      },
-    },
-    '/admin/{id}': {
-      get: {
-        summary: 'Get admin by ID',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
-        ],
-        responses: {
-          '200': { description: 'Admin data' },
-          '403': { description: 'Forbidden' },
-          '404': { description: 'Not found' },
-        },
-      },
-      put: {
-        summary: 'Update admin by ID',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          { name: 'id', in: 'path', required: true, schema: { type: 'integer' } },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string' },
-                  email: { type: 'string' },
-                  password: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-        responses: {
-          '200': { description: 'Updated admin' },
-          '403': { description: 'Forbidden' },
-        },
-      },
-    },
-    '/news': {
-      get: {
-        summary: 'List all news entries',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          '200': { description: 'List of news entries' },
-        },
-      },
-      post: {
-        summary: 'Add news entry (admin only)',
-        security: [{ bearerAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                type: 'object',
-                properties: {
-                  title: { type: 'string' },
-                  content: { type: 'string' },
-                  published_at: { type: 'string', format: 'date-time' },
-                },
-                required: ['title', 'content', 'published_at'],
-              },
-            },
-          },
-        },
-        responses: {
-          '201': { description: 'Created news entry' },
-          '403': { description: 'Forbidden' },
-        },
-      },
-    },
-  },
-};
+});
+const upload = multer({ storage });
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// Serve static files from /uploads folder
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Root route
-app.get('/', (req, res) => {
-  res.send('Welcome to the Admin and News API');
+// Setup PostgreSQL connection pool using DATABASE_URL from env
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// Middleware: Verify JWT token and protect routes
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader)
+    return res.status(401).json({ message: 'Authorization header missing' });
+
+  const token = authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ message: 'Token missing' });
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid or expired token' });
+    req.user = user;
+    next();
+  });
+}
+
+// Initialize DB tables and create default admin if none exists
+async function initializeDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admins (
+      id SERIAL PRIMARY KEY,
+      username VARCHAR(100) UNIQUE NOT NULL,
+      password VARCHAR(255) NOT NULL
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS news (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(255) NOT NULL,
+      content TEXT NOT NULL,
+      image_url VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  const { rows } = await pool.query('SELECT * FROM admins LIMIT 1');
+  if (rows.length === 0) {
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    await pool.query(
+      'INSERT INTO admins (username, password) VALUES ($1, $2)',
+      ['admin', hashedPassword]
+    );
+    console.log('Default admin created: username=admin password=admin123');
+  }
+}
+
+// ROUTES
+
+// Admin login - returns JWT token
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password)
+    return res.status(400).json({ message: 'Username and password required' });
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM admins WHERE username=$1', [username]);
+    const admin = rows[0];
+    if (!admin) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const isPasswordValid = await bcrypt.compare(password, admin.password);
+    if (!isPasswordValid) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const token = jwt.sign(
+      { id: admin.id, username: admin.username },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.json({ token });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
+
+// Create news post with optional image upload
+app.post('/api/news', authenticateToken, upload.single('image'), async (req, res) => {
+  const { title, content } = req.body;
+  if (!title || !content)
+    return res.status(400).json({ message: 'Title and content are required' });
+
+  let imageUrl = null;
+  if (req.file) {
+    imageUrl = `/uploads/${req.file.filename}`;
+  }
+
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO news (title, content, image_url) VALUES ($1, $2, $3) RETURNING *',
+      [title, content, imageUrl]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Create news error:', err);
+    res.status(500).json({ message: 'Failed to create news' });
+  }
+});
+
+// Get all news posts
+app.get('/api/news', authenticateToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM news ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (err) {
+    console.error('Get news error:', err);
+    res.status(500).json({ message: 'Failed to get news' });
+  }
+});
+
+// Get single news post by ID
+app.get('/api/news/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query('SELECT * FROM news WHERE id=$1', [id]);
+    if (rows.length === 0) return res.status(404).json({ message: 'News not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Get news by ID error:', err);
+    res.status(500).json({ message: 'Failed to get news' });
+  }
+});
+
+// Update news post by ID, optional new image upload
+app.put('/api/news/:id', authenticateToken, upload.single('image'), async (req, res) => {
+  const { id } = req.params;
+  const { title, content } = req.body;
+
+  if (!title || !content)
+    return res.status(400).json({ message: 'Title and content are required' });
+
+  try {
+    // Check if news exists
+    const { rows } = await pool.query('SELECT * FROM news WHERE id=$1', [id]);
+    if (rows.length === 0) return res.status(404).json({ message: 'News not found' });
+
+    let imageUrl = rows[0].image_url;
+
+    // If new image uploaded, delete old image and update path
+    if (req.file) {
+      if (imageUrl) {
+        const oldImagePath = path.join(__dirname, imageUrl);
+        fs.unlink(oldImagePath, (err) => {
+          if (err) console.error('Failed to delete old image:', err);
+        });
+      }
+      imageUrl = `/uploads/${req.file.filename}`;
+    }
+
+    const updated = await pool.query(
+      'UPDATE news SET title=$1, content=$2, image_url=$3 WHERE id=$4 RETURNING *',
+      [title, content, imageUrl, id]
+    );
+
+    res.json(updated.rows[0]);
+  } catch (err) {
+    console.error('Update news error:', err);
+    res.status(500).json({ message: 'Failed to update news' });
+  }
+});
+
+// Delete news post by ID and delete image file if exists
+app.delete('/api/news/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM news WHERE id=$1', [id]);
+    if (rows.length === 0) return res.status(404).json({ message: 'News not found' });
+
+    const imageUrl = rows[0].image_url;
+    if (imageUrl) {
+      const imagePath = path.join(__dirname, imageUrl);
+      fs.unlink(imagePath, (err) => {
+        if (err) console.error('Failed to delete image:', err);
+      });
+    }
+
+    await pool.query('DELETE FROM news WHERE id=$1', [id]);
+    res.json({ message: 'News deleted successfully' });
+  } catch (err) {
+    console.error('Delete news error:', err);
+    res.status(500).json({ message: 'Failed to delete news' });
+  }
+});
+
+// Start server after DB init
+const PORT = process.env.PORT || 3000;
+initializeDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to initialize database:', err);
+  });
