@@ -114,7 +114,7 @@ function processUSSDFlow(input) {
         return selectDish(lang, choice, 0);
     }
 
-    // Third level: Paginated menu or dish selection
+    // Third level: Handle navigation after back or pagination
     if (input.length === 3) {
         const lang = input[0] === "1" ? "english" : "kinyarwanda";
         const prevChoice = parseInt(input[1]);
@@ -125,7 +125,18 @@ function processUSSDFlow(input) {
             return MESSAGES[lang].INVALID;
         }
 
-        // Determine current page
+        // If previous choice was Back (0), treat currentChoice as a new language selection
+        if (prevChoice === 0) {
+            const newLang = currentChoice === 1 ? "english" : currentChoice === 2 ? "kinyarwanda" : null;
+            if (!newLang) {
+                console.log('Invalid language selection after back:', currentChoice);
+                return MESSAGES.english.INVALID;
+            }
+            console.log('Language selected after back:', newLang);
+            return getMenu(newLang, 0);
+        }
+
+        // Otherwise, handle as paginated menu navigation
         const page = prevChoice === 6 ? 1 : 0;
 
         if (currentChoice === 0) {
