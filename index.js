@@ -158,6 +158,44 @@ function processUSSDFlow(input) {
         return selectDish(lang, currentChoice, page);
     }
 
+    // Fourth level: Handle navigation after back to welcome screen
+    if (input.length === 4) {
+        const firstInput = input[0];
+        const secondInput = parseInt(input[1]);
+        const thirdInput = parseInt(input[2]);
+        const fourthInput = parseInt(input[3]);
+
+        if (isNaN(secondInput) || isNaN(thirdInput) || isNaN(fourthInput)) {
+            console.log('Invalid input at level 4:', input[1], input[2], input[3]);
+            return MESSAGES.english.INVALID;
+        }
+
+        // If second input was Back (0), treat third and fourth inputs as a new sequence (lang, choice)
+        if (secondInput === 0) {
+            const lang = thirdInput === 1 ? "english" : thirdInput === 2 ? "kinyarwanda" : null;
+            if (!lang) {
+                console.log('Invalid language selection at level 4:', thirdInput);
+                return MESSAGES.english.INVALID;
+            }
+
+            if (fourthInput === 0) {
+                console.log('Going back to welcome screen from first menu after back');
+                return MESSAGES.english.WELCOME;
+            }
+
+            if (fourthInput === 6) {
+                console.log('Navigating to next page (page 1) after back');
+                return getMenu(lang, 1);
+            }
+
+            console.log('Selecting dish from page 0, choice:', fourthInput, 'after back');
+            return selectDish(lang, fourthInput, 0);
+        }
+
+        console.log('Invalid sequence at level 4:', input);
+        return MESSAGES.english.INVALID;
+    }
+
     console.log('Invalid input length:', input.length);
     return MESSAGES.english.INVALID;
 }
@@ -193,13 +231,17 @@ function getMenu(lang, page) {
 }
 
 function selectDish(lang, choice, page) {
+    console.log('selectDish called with lang:', lang, 'choice:', choice, 'page:', page);
+    
     const allDishes = [...dishes[lang].healthy, ...dishes[lang].unhealthy];
     const start = page * ITEMS_PER_PAGE;
     const items = allDishes.slice(start, start + ITEMS_PER_PAGE);
     const dishIndex = start + choice - 1;
 
+    console.log('All dishes:', allDishes, 'Start index:', start, 'Items on page:', items, 'Dish index:', dishIndex);
+
     if (choice < 1 || choice > items.length || !allDishes[dishIndex]) {
-        console.log('Invalid dish choice:', choice, 'on page:', page);
+        console.log('Invalid dish choice:', choice, 'on page:', page, 'items length:', items.length);
         return MESSAGES[lang].INVALID_CHOICE;
     }
     
@@ -210,7 +252,7 @@ function selectDish(lang, choice, page) {
         (isHealthy ? "is a healthy dish" : "is not a healthy dish") : 
         (isHealthy ? "ni ifunguro ryiza ku buzima" : "si ifunguro ryiza ku buzima")}.\n\n${MESSAGES[lang].INVALID.split("END ")[1]}`;
     
-    console.log('Dish selected:', chosen, 'Healthy:', isHealthy);
+    console.log('Dish selected:', chosen, 'Healthy:', isHealthy, 'Response:', response);
     return response;
 }
 
