@@ -5,7 +5,7 @@ const fs = require('fs');
 // Constants for messages
 const MESSAGES = {
     english: {
-        WELCOME: "CON Welcome to the favorite  application.\nPlease select language / Hitamo ururimi\n1. English\n2. Kinyarwanda",
+        WELCOME: "CON Welcome to the favorite application.\nPlease select language / Hitamo ururimi\n1. English\n2. Kinyarwanda",
         INVALID: "END Invalid input. Dial again to restart.",
         INVALID_CHOICE: "END Invalid choice. Dial again to restart.",
         NO_DISHES: "END No more dishes. Dial again to restart.",
@@ -45,10 +45,10 @@ const server = http.createServer((req, res) => {
             try {
                 const parsedBody = querystring.parse(body);
                 const text = (parsedBody.text || "").trim().replace(/[^0-9*]/g, "");
-                const input = text.split("*");
+                const input = text.split("*").filter(segment => segment !== "");
                 let response = "";
 
-                console.log('Received text:', text);
+                console.log('Received text:', text, 'Parsed input:', input);
 
                 if (text === "") {
                     response = MESSAGES.english.WELCOME;
@@ -64,7 +64,7 @@ const server = http.createServer((req, res) => {
                 res.end(response);
             } catch (error) {
                 console.error('Unhandled system error:', error);
-                const fallbackResponse = "END The system is under maintenance. Please try again later.";
+                const fallbackResponse = MESSAGES.english.ERROR;
                 res.writeHead(200, { 'Content-Type': 'text/plain' });
                 res.end(fallbackResponse);
             }
@@ -77,10 +77,10 @@ const server = http.createServer((req, res) => {
 
 // Validate input
 function validateInput(input, lang, level) {
-    if (!input || input.length > 3) {
+    if (!input || level < 1 || level > 3) {
         return MESSAGES[lang].INVALID;
     }
-    if (level >= 2 && isNaN(parseInt(input[level - 1]))) {
+    if (level >= 2 && input[level - 1] !== "0" && isNaN(parseInt(input[level - 1]))) {
         return MESSAGES[lang].INVALID_CHOICE;
     }
     return null;
@@ -130,25 +130,31 @@ function handleFlow(lang, input) {
     const validationError = validateInput(input, lang, input.length);
     if (validationError) return validationError;
 
-    const page = input.length > 1 ? parseInt(input[1]) - 1 : 0;
-
     if (input.length === 1) {
         return getMenu(lang, 0);
     }
 
+    const page = input.length > 1 && input[1] !== "0" ? parseInt(input[1]) - 1 : 0;
+
     if (input.length === 2 && input[1] === "0") {
         return MESSAGES[lang].WELCOME;
+    }
+
+    if (input.length === 2) {
+        if (input[1] === `${ITEMS_PER_PAGE + 1}`) {
+            return getMenu(lang, page + 1);
+        }
+        return getMenu(lang, page);
     }
 
     if (input.length === 3 && input[2] === "0") {
         return getMenu(lang, page);
     }
 
-    if (input.length === 2) {
-        return getMenu(lang, page);
-    }
-
     if (input.length === 3) {
+        if (input[2] === `${ITEMS_PER_PAGE + 1}`) {
+            return getMenu(lang, page + 1);
+        }
         return handleDishSelection(lang, input, page);
     }
 
