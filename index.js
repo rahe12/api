@@ -131,13 +131,13 @@ function handleFlow(lang, input) {
     if (validationError) return validationError;
 
     if (input.length === 1) {
-        return getMenu(lang, 0);
+        return getMenu(lang, 0); // Show menu directly when language is selected
     }
 
     const page = input.length > 1 && input[1] !== "0" ? parseInt(input[1]) - 1 : 0;
 
     if (input.length === 2 && input[1] === "0") {
-        return MESSAGES[lang].WELCOME;
+        return MESSAGES[lang].WELCOME; // Go back to language selection
     }
 
     if (input.length === 2) {
