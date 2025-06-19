@@ -94,6 +94,8 @@ function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-server.listen(3000, () => {
-    console.log("✅ USSD Dishes app is running at http://localhost:3000");
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+    console.log(`✅ USSD Dishes app is running on port ${PORT}`);
 });
