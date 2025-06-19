@@ -11,7 +11,8 @@ const MESSAGES = {
         NO_DISHES: "END No more dishes. Dial again to restart.",
         BACK: "Go back",
         MORE: "More",
-        CHOOSE: "Choose number:"
+        CHOOSE: "Choose number:",
+        ERROR: "END The system is under maintenance. Please try again later."
     },
     kinyarwanda: {
         WELCOME: "CON Welcome to the application.\nPlease select language / Hitamo ururimi\n1. English\n2. Kinyarwanda",
@@ -20,7 +21,8 @@ const MESSAGES = {
         NO_DISHES: "END Nta mafunguro asigaye. Kanda * ikindi gihe kugirango utangire.",
         BACK: "Subira inyuma",
         MORE: "Ibikurikira",
-        CHOOSE: "Hitamo:"
+        CHOOSE: "Hitamo:",
+        ERROR: "END Sisitemu iri mu bikorwa byo kuyisana. Ongera ugerageze nyuma gato."
     }
 };
 
@@ -40,25 +42,32 @@ const server = http.createServer((req, res) => {
         let body = '';
         req.on('data', chunk => body += chunk.toString());
         req.on('end', () => {
-            const parsedBody = querystring.parse(body);
-            const text = (parsedBody.text || "").trim().replace(/[^0-9*]/g, ""); // Sanitize input
-            const input = text.split("*");
-            let response = "";
+            try {
+                const parsedBody = querystring.parse(body);
+                const text = (parsedBody.text || "").trim().replace(/[^0-9*]/g, "");
+                const input = text.split("*");
+                let response = "";
 
-            console.log('Received text:', text);
+                console.log('Received text:', text);
 
-            if (text === "") {
-                response = MESSAGES.english.WELCOME;
-            } else if (input[0] === "1") {
-                response = handleFlow("english", input);
-            } else if (input[0] === "2") {
-                response = handleFlow("kinyarwanda", input);
-            } else {
-                response = MESSAGES.english.INVALID;
+                if (text === "") {
+                    response = MESSAGES.english.WELCOME;
+                } else if (input[0] === "1") {
+                    response = handleFlow("english", input);
+                } else if (input[0] === "2") {
+                    response = handleFlow("kinyarwanda", input);
+                } else {
+                    response = MESSAGES.english.INVALID;
+                }
+
+                res.writeHead(200, { 'Content-Type': 'text/plain' });
+                res.end(response);
+            } catch (error) {
+                console.error('Unhandled system error:', error);
+                const fallbackResponse = "END The system is under maintenance. Please try again later.";
+                res.writeHead(200, { 'Content-Type': 'text/plain' });
+                res.end(fallbackResponse);
             }
-
-            res.writeHead(200, { 'Content-Type': 'text/plain' });
-            res.end(response);
         });
     } else {
         res.writeHead(200);
