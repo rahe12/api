@@ -1,0 +1,22 @@
+{
+  "english": {
+    "healthy": [
+      "grilled chicken", "vegetable salad", "boiled beans", "isombe", "sweet potatoes", "quinoa bowl",
+      "brown rice and vegetables", "fish with spinach", "steamed vegetables", "lentils and rice"
+    ],
+    "unhealthy": [
+      "fried chips", "burger", "pizza", "fried chicken", "hot dog", "nyama choma with fries",
+      "bread and soda", "donuts", "bacon and eggs", "instant noodles"
+    ]
+  },
+  "kinyarwanda": {
+    "healthy": [
+      "inkoko yokeje", "salade y’imboga", "ibishyimbo bishyushye", "isombe", "ibirayi biryohereye",
+      "umuceri n’imboga", "quinoa", "amafi n’epinari", "imboga zipfundikiye", "ibigori n’ibishyimbo"
+    ],
+    "unhealthy": [
+      "ifiriti", "burgeri", "piza", "inkoko yokeje mu mavuta", "hot dog", "inyama zokeje n’ifiriti",
+      "umugati na fanta", "donati", "bacon n’amagi", "makaroni ya vuba"
+    ]
+  }
+}
