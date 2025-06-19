@@ -50,7 +50,8 @@ const server = http.createServer((req, res) => {
 
                 console.log('Received text:', text, 'Parsed input:', input);
 
-                if (text === "") {
+                // Reset if empty or user goes back to language menu
+                if (text === "" || (input.length === 1 && input[0] === "0")) {
                     response = MESSAGES.english.WELCOME;
                 } else if (input[0] === "1") {
                     response = handleFlow("english", input);
@@ -131,13 +132,13 @@ function handleFlow(lang, input) {
     if (validationError) return validationError;
 
     if (input.length === 1) {
-        return getMenu(lang, 0); // Show menu directly when language is selected
+        return getMenu(lang, 0); // Show first menu page after language selection
     }
 
     const page = input.length > 1 && input[1] !== "0" ? parseInt(input[1]) - 1 : 0;
 
     if (input.length === 2 && input[1] === "0") {
-        return MESSAGES[lang].WELCOME; // Go back to language selection
+        return MESSAGES[lang].WELCOME; // Back to language selection
     }
 
     if (input.length === 2) {
