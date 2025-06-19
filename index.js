@@ -50,10 +50,24 @@ const server = http.createServer((req, res) => {
 
                 console.log('Received text:', text, 'Parsed input:', input);
 
-                // Reset if empty or user goes back to language menu
-                if (text === "" || (input.length === 1 && input[0] === "0")) {
+                // Reset if empty
+                if (text === "") {
                     response = MESSAGES.english.WELCOME;
-                } else if (input[0] === "1") {
+                } 
+                // Check if user has navigated back to language selection
+                else if (hasReturnedToLanguageSelection(input)) {
+                    // Get the last input (the new language selection)
+                    const lastChoice = input[input.length - 1];
+                    if (lastChoice === "1") {
+                        response = handleFlow("english", ["1"]);
+                    } else if (lastChoice === "2") {
+                        response = handleFlow("kinyarwanda", ["2"]);
+                    } else {
+                        response = MESSAGES.english.INVALID;
+                    }
+                }
+                // Normal flow processing
+                else if (input[0] === "1") {
                     response = handleFlow("english", input);
                 } else if (input[0] === "2") {
                     response = handleFlow("kinyarwanda", input);
@@ -75,6 +89,20 @@ const server = http.createServer((req, res) => {
         res.end("USSD service running.");
     }
 });
+
+// Check if user has returned to language selection after going back
+function hasReturnedToLanguageSelection(input) {
+    if (input.length < 3) return false;
+    
+    // Look for pattern: [lang, "0", new_lang_choice]
+    // This indicates user went back to language selection and made a new choice
+    for (let i = 1; i < input.length - 1; i++) {
+        if (input[i] === "0" && (input[i + 1] === "1" || input[i + 1] === "2")) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // Validate input
 function validateInput(input, lang, level) {
