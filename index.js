@@ -136,6 +136,16 @@ function processUSSDFlow(input) {
             return getMenu(newLang, 0);
         }
 
+        // If previous choice was a dish selection, handle back
+        if (prevChoice >= 1 && prevChoice <= 5) {
+            if (currentChoice === 0) {
+                console.log('Going back to menu page 0 after dish selection');
+                return getMenu(lang, 0);
+            }
+            console.log('Invalid choice after dish selection:', currentChoice);
+            return MESSAGES[lang].INVALID;
+        }
+
         // Otherwise, handle as paginated menu navigation
         const page = prevChoice === 6 ? 1 : 0;
 
@@ -158,7 +168,7 @@ function processUSSDFlow(input) {
         return selectDish(lang, currentChoice, page);
     }
 
-    // Fourth level: Handle navigation after back to welcome screen
+    // Fourth level: Handle navigation after back to welcome screen or dish selection
     if (input.length === 4) {
         const firstInput = input[0];
         const secondInput = parseInt(input[1]);
@@ -192,8 +202,19 @@ function processUSSDFlow(input) {
             return selectDish(lang, fourthInput, 0);
         }
 
+        // If third input was a dish selection, handle back
+        const lang = firstInput === "1" ? "english" : "kinyarwanda";
+        if (thirdInput >= 1 && thirdInput <= 5) {
+            if (fourthInput === 0) {
+                console.log('Going back to menu page 0 after dish selection at level 4');
+                return getMenu(lang, 0);
+            }
+            console.log('Invalid choice after dish selection at level 4:', fourthInput);
+            return MESSAGES[lang].INVALID;
+        }
+
         console.log('Invalid sequence at level 4:', input);
-        return MESSAGES.english.INVALID;
+        return MESSAGES[lang].INVALID;
     }
 
     console.log('Invalid input length:', input.length);
@@ -248,9 +269,9 @@ function selectDish(lang, choice, page) {
     const chosen = allDishes[dishIndex];
     const isHealthy = dishes[lang].healthy.includes(chosen);
     
-    const response = `END ${capitalize(chosen)} ${lang === "english" ? 
+    const response = `CON ${capitalize(chosen)} ${lang === "english" ? 
         (isHealthy ? "is a healthy dish" : "is not a healthy dish") : 
-        (isHealthy ? "ni ifunguro ryiza ku buzima" : "si ifunguro ryiza ku buzima")}.\n\n${MESSAGES[lang].INVALID.split("END ")[1]}`;
+        (isHealthy ? "ni ifunguro ryiza ku buzima" : "si ifunguro ryiza ku buzima")}.\n0. ${MESSAGES[lang].BACK}\n\n${MESSAGES[lang].CHOOSE}`;
     
     console.log('Dish selected:', chosen, 'Healthy:', isHealthy, 'Response:', response);
     return response;
