@@ -11,9 +11,13 @@ const server = http.createServer((req, res) => {
         let body = '';
         req.on('data', chunk => body += chunk.toString());
         req.on('end', () => {
-            const { text } = querystring.parse(body);
+            const parsedBody = querystring.parse(body);
+            const text = parsedBody.text || "";
             const input = text.split("*");
             let response = "";
+
+            // Debug log:
+            console.log('Received text:', text);
 
             // Initial language selection
             if (text === "") {
@@ -49,13 +53,13 @@ function handleFlow(lang, input) {
         return getMenu(lang, page);
     } else if (input.length === 3) {
         const choiceIndex = page * ITEMS_PER_PAGE + parseInt(input[2]) - 1;
-        const chosen = allDishes[choiceIndex];
-        if (!chosen) {
+        if (isNaN(choiceIndex) || !allDishes[choiceIndex]) {
             return lang === "english"
                 ? "END Invalid choice."
                 : "END Uhisemo nabi.";
         }
 
+        const chosen = allDishes[choiceIndex];
         const isHealthy = dishes[lang].healthy.includes(chosen);
         return lang === "english"
             ? `END ${capitalize(chosen)} is ${isHealthy ? "a healthy dish" : "not a healthy dish"}.`
