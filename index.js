@@ -5,7 +5,7 @@ const fs = require('fs');
 // Constants for messages
 const MESSAGES = {
     english: {
-        WELCOME: "CON Welcome to the application.\nPlease select language / Hitamo ururimi\n1. English\n2. Kinyarwanda",
+        WELCOME: "CON Welcome to the favorite  application.\nPlease select language / Hitamo ururimi\n1. English\n2. Kinyarwanda",
         INVALID: "END Invalid input. Dial again to restart.",
         INVALID_CHOICE: "END Invalid choice. Dial again to restart.",
         NO_DISHES: "END No more dishes. Dial again to restart.",
