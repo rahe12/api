@@ -118,14 +118,16 @@ function validateInput(input, lang, level) {
 // Handle dish selection
 function handleDishSelection(lang, input, page) {
     const allDishes = [...dishes[lang].healthy, ...dishes[lang].unhealthy];
-    const choiceIndex = page * ITEMS_PER_PAGE + parseInt(input[2]) - 1;
+    const dishChoice = parseInt(input[input.length - 1]); // Get the last choice (dish number)
+    const choiceIndex = page * ITEMS_PER_PAGE + dishChoice - 1;
 
-    if (isNaN(choiceIndex) || !allDishes[choiceIndex]) {
+    if (isNaN(dishChoice) || dishChoice < 1 || dishChoice > ITEMS_PER_PAGE || !allDishes[choiceIndex]) {
         return MESSAGES[lang].INVALID_CHOICE;
     }
 
     const chosen = allDishes[choiceIndex];
     const isHealthy = dishes[lang].healthy.includes(chosen);
+    
     return lang === "english"
         ? `END ${capitalize(chosen)} is ${isHealthy ? "a healthy dish" : "not a healthy dish"}.\n\nDial again to restart.`
         : `END ${capitalize(chosen)} ${isHealthy ? "ni ifunguro ryiza ku buzima" : "si ifunguro ryiza ku buzima"}.\n\nKanda * ikindi gihe kugirango utangire.`;
@@ -141,16 +143,25 @@ function getMenu(lang, page) {
         return MESSAGES[lang].NO_DISHES;
     }
 
-    let menu = items.map((dish, i) => `${i + 1}. ${capitalize(dish)}`).join("\n");
+    // Build menu items
+    let menuItems = [];
+    
+    // Add back option
+    menuItems.push(`0. ${MESSAGES[lang].BACK}`);
+    
+    // Add dish items
+    items.forEach((dish, i) => {
+        menuItems.push(`${i + 1}. ${capitalize(dish)}`);
+    });
+    
+    // Add more option if there are more items
     const hasMore = start + ITEMS_PER_PAGE < allDishes.length;
-    const backOption = `0. ${MESSAGES[lang].BACK}`;
-
-    menu = `${backOption}\n${menu}`;
-
     if (hasMore) {
-        menu += `\n${ITEMS_PER_PAGE + 1}. ${MESSAGES[lang].MORE}`;
+        menuItems.push(`${ITEMS_PER_PAGE + 1}. ${MESSAGES[lang].MORE}`);
     }
 
+    // Join all menu items and add the choose prompt
+    const menu = menuItems.join("\n");
     return `CON ${menu}\n\n${MESSAGES[lang].CHOOSE}`;
 }
 
@@ -159,32 +170,56 @@ function handleFlow(lang, input) {
     const validationError = validateInput(input, lang, input.length);
     if (validationError) return validationError;
 
+    // Step 1: Language selected, show first page of dishes
     if (input.length === 1) {
-        return getMenu(lang, 0); // Show first menu page after language selection
+        return getMenu(lang, 0);
     }
 
-    const page = input.length > 1 && input[1] !== "0" ? parseInt(input[1]) - 1 : 0;
-
-    if (input.length === 2 && input[1] === "0") {
-        return MESSAGES[lang].WELCOME; // Back to language selection
-    }
-
+    // Step 2: User made a choice from the dish menu
     if (input.length === 2) {
-        if (input[1] === `${ITEMS_PER_PAGE + 1}`) {
-            return getMenu(lang, page + 1);
+        const choice = input[1];
+        
+        if (choice === "0") {
+            // Go back to language selection
+            return MESSAGES[lang].WELCOME;
         }
-        return getMenu(lang, page);
+        
+        if (choice === `${ITEMS_PER_PAGE + 1}`) {
+            // Show next page
+            return getMenu(lang, 1);
+        }
+        
+        // User selected a dish from page 0
+        return handleDishSelection(lang, input, 0);
     }
 
-    if (input.length === 3 && input[2] === "0") {
-        return getMenu(lang, page);
-    }
-
+    // Step 3: User navigating through pages or making final selection
     if (input.length === 3) {
-        if (input[2] === `${ITEMS_PER_PAGE + 1}`) {
-            return getMenu(lang, page + 1);
+        const pageChoice = input[1];
+        const finalChoice = input[2];
+        
+        // Calculate current page based on navigation
+        let currentPage = 0;
+        if (pageChoice === `${ITEMS_PER_PAGE + 1}`) {
+            currentPage = 1;
         }
-        return handleDishSelection(lang, input, page);
+        
+        if (finalChoice === "0") {
+            // Go back to previous page/menu
+            if (currentPage > 0) {
+                return getMenu(lang, currentPage - 1);
+            } else {
+                return getMenu(lang, 0);
+            }
+        }
+        
+        if (finalChoice === `${ITEMS_PER_PAGE + 1}`) {
+            // Show next page
+            return getMenu(lang, currentPage + 1);
+        }
+        
+        // User selected a dish
+        return handleDishSelection(lang, input, currentPage);
     }
 
     return MESSAGES[lang].INVALID;
