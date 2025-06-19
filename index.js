@@ -114,7 +114,7 @@ function processUSSDFlow(input) {
         return selectDish(lang, choice, 0);
     }
 
-    // Third level: Handle navigation after back or pagination
+    // Third level: Handle navigation after back, pagination, or dish selection
     if (input.length === 3) {
         const lang = input[0] === "1" ? "english" : "kinyarwanda";
         const prevChoice = parseInt(input[1]);
@@ -136,18 +136,14 @@ function processUSSDFlow(input) {
             return getMenu(newLang, 0);
         }
 
-        // If previous choice was a dish selection, handle back
-        if (prevChoice >= 1 && prevChoice <= 5) {
-            if (currentChoice === 0) {
-                console.log('Going back to menu page 0 after dish selection');
-                return getMenu(lang, 0);
-            }
-            console.log('Invalid choice after dish selection:', currentChoice);
-            return MESSAGES[lang].INVALID;
-        }
-
-        // Otherwise, handle as paginated menu navigation
+        // Determine the page based on previous choice
         const page = prevChoice === 6 ? 1 : 0;
+
+        // If previous choice was a dish selection (1–5), handle back
+        if ((prevChoice >= 1 && prevChoice <= 5) && currentChoice === 0) {
+            console.log('Going back to menu page', page, 'after dish selection');
+            return getMenu(lang, page);
+        }
 
         if (currentChoice === 0) {
             if (page === 1) {
@@ -198,19 +194,23 @@ function processUSSDFlow(input) {
                 return getMenu(lang, 1);
             }
 
+            // Handle back after dish selection
+            if ((fourthInput >= 1 && fourthInput <= 5) && fourthInput === 0) {
+                console.log('Going back to menu page 0 after dish selection at level 4');
+                return getMenu(lang, 0);
+            }
+
             console.log('Selecting dish from page 0, choice:', fourthInput, 'after back');
             return selectDish(lang, fourthInput, 0);
         }
 
         // If third input was a dish selection, handle back
         const lang = firstInput === "1" ? "english" : "kinyarwanda";
-        if (thirdInput >= 1 && thirdInput <= 5) {
-            if (fourthInput === 0) {
-                console.log('Going back to menu page 0 after dish selection at level 4');
-                return getMenu(lang, 0);
-            }
-            console.log('Invalid choice after dish selection at level 4:', fourthInput);
-            return MESSAGES[lang].INVALID;
+        const page = secondInput === 6 ? 1 : 0;
+
+        if ((thirdInput >= 1 && thirdInput <= 5) && fourthInput === 0) {
+            console.log('Going back to menu page', page, 'after dish selection at level 4');
+            return getMenu(lang, page);
         }
 
         console.log('Invalid sequence at level 4:', input);
