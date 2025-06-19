@@ -16,19 +16,15 @@ const server = http.createServer((req, res) => {
             const input = text.split("*");
             let response = "";
 
-            // Debug log:
             console.log('Received text:', text);
 
-            // Initial language selection
             if (text === "") {
                 response = `CON Welcome to the application.\nPlease select language / Hitamo ururimi
 1. English
 2. Kinyarwanda`;
             } else if (input[0] === "1") {
-                // English
                 response = handleFlow("english", input);
             } else if (input[0] === "2") {
-                // Kinyarwanda
                 response = handleFlow("kinyarwanda", input);
             } else {
                 response = "END Invalid input.";
@@ -49,10 +45,25 @@ function handleFlow(lang, input) {
 
     if (input.length === 1) {
         return getMenu(lang, 0);
-    } else if (input.length === 2) {
+    }
+
+    // If at Level 2 and user presses 0 → go back to language selection
+    if (input.length === 2 && input[1] === "0") {
+        return `CON Welcome to the application.\nPlease select language / Hitamo ururimi
+1. English
+2. Kinyarwanda`;
+    }
+
+    // If at Level 3 and user presses 0 → go back to dish menu
+    if (input.length === 3 && input[2] === "0") {
+        return getMenu(lang, page);
+    }
+
+    if (input.length === 2) {
         return getMenu(lang, page);
     } else if (input.length === 3) {
         const choiceIndex = page * ITEMS_PER_PAGE + parseInt(input[2]) - 1;
+
         if (isNaN(choiceIndex) || !allDishes[choiceIndex]) {
             return lang === "english"
                 ? "END Invalid choice."
@@ -62,8 +73,8 @@ function handleFlow(lang, input) {
         const chosen = allDishes[choiceIndex];
         const isHealthy = dishes[lang].healthy.includes(chosen);
         return lang === "english"
-            ? `END ${capitalize(chosen)} is ${isHealthy ? "a healthy dish" : "not a healthy dish"}.`
-            : `END ${capitalize(chosen)} ${isHealthy ? "ni ifunguro ryiza ku buzima" : "si ifunguro ryiza ku buzima"}.`;
+            ? `END ${capitalize(chosen)} is ${isHealthy ? "a healthy dish" : "not a healthy dish"}.\n\nDial again to restart.`
+            : `END ${capitalize(chosen)} ${isHealthy ? "ni ifunguro ryiza ku buzima" : "si ifunguro ryiza ku buzima"}.\n\nKanda * ikindi gihe kugirango utangire.`;
     }
 
     return "END Invalid input.";
@@ -82,6 +93,9 @@ function getMenu(lang, page) {
 
     let menu = items.map((dish, i) => `${i + 1}. ${capitalize(dish)}`).join("\n");
     const hasMore = start + ITEMS_PER_PAGE < allDishes.length;
+    const backOption = `0. ${lang === "english" ? "Go back" : "Subira inyuma"}`;
+
+    menu = `${backOption}\n${menu}`;
 
     if (hasMore) {
         menu += `\n${ITEMS_PER_PAGE + 1}. ${lang === "english" ? "More" : "Ibikurikira"}`;
