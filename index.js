@@ -1,289 +1,379 @@
 const http = require('http');
 const querystring = require('querystring');
-const fs = require('fs');
 
 // Constants for messages
 const MESSAGES = {
-    english: {
-        WELCOME: "CON Welcome to the favorite application.\nPlease select language / Hitamo ururimi\n1. English\n2. Kinyarwanda",
-        INVALID: "END Invalid input. Dial again to restart.",
-        INVALID_CHOICE: "END Invalid choice. Dial again to restart.",
-        NO_DISHES: "END No dishes available. Dial again to restart.",
-        BACK: "Go back",
-        MORE: "More",
-        CHOOSE: "Choose a number:",
-        ERROR: "END The system is under maintenance. Please try again later."
+  french: {
+    WELCOME: "CON Bienvenue à la Calculatrice IMC\nVeuillez sélectionner la langue\n1. Français\n2. Kinyarwanda",
+    ENTER_WEIGHT: "CON Entrez votre poids en kilogrammes (ex., 70) :\n0. Retour\n\nChoisissez un numéro :",
+    ENTER_HEIGHT: "CON Entrez votre taille en centimètres (ex., 170) :\n0. Retour\n\nChoisissez un numéro :",
+    BMI_RESULT: "CON Votre IMC est %s\nCatégorie : %s\n1. Conseils de santé\n0. Retour\n\nChoisissez un numéro :",
+    HEALTH_TIPS: {
+      underweight: "CON Conseils : Mangez des aliments riches en nutriments, augmentez l'apport calorique, consultez un diététicien.\n0. Retour\n\nChoisissez un numéro :",
+      normal: "CON Conseils : Maintenez une alimentation équilibrée, faites de l'exercice régulièrement, restez hydraté.\n0. Retour\n\nChoisissez un numéro :",
+      overweight: "CON Conseils : Réduisez l'apport calorique, augmentez l'activité physique, consultez un médecin.\n0. Retour\n\nChoisissez un numéro :",
+      obese: "CON Conseils : Consultez un médecin, adoptez une alimentation saine, faites de l'exercice sous supervision.\n0. Retour\n\nChoisissez un numéro :"
     },
-    kinyarwanda: {
-        WELCOME: "CON Murakaza neza kuri application.\nPlease select language / Hitamo ururimi\n1. English\n2. Kinyarwanda",
-        INVALID: "END Injiza nabi. Kanda * ukongere utangire.",
-        INVALID_CHOICE: "END Guhitamo nabi. Kanda * ukongere utangire.",
-        NO_DISHES: "END Nta bifungurwa birahari. Kanda * ukongere utangire.",
-        BACK: "Subira inyuma",
-        MORE: "Ibikurikira",
-        CHOOSE: "Hitamo nimero:",
-        ERROR: "END Sisitemu iri mu bikorwa byo kuyisana. Ongera ugerageze nyuma."
-    }
+    INVALID: "END Entrée invalide. Recomposez pour recommencer.",
+    INVALID_CHOICE: "END Choix invalide. Recomposez pour recommencer.",
+    ERROR: "END Le système est en maintenance. Veuillez réessayer plus tard.",
+    BACK: "Retour",
+    CHOOSE: "Choisissez un numéro :"
+  },
+  kinyarwanda: {
+    WELCOME: "CON Murakaza neza kuri BMI Calculator\nHitamo ururimi\n1. Français\n2. Kinyarwanda",
+    ENTER_WEIGHT: "CON Injiza ibiro byawe muri kilogarama (urugero, 70) :\n0. Subira inyuma\n\nHitamo nimero :",
+    ENTER_HEIGHT: "CON Injiza uburebure bwawe muri santimetero (urugero, 170) :\n0. Subira inyuma\n\nHitamo nimero :",
+    BMI_RESULT: "CON BMI yawe ni %s\nIcyiciro : %s\n1. Inama z'ubuzima\n0. Subira inyuma\n\nHitamo nimero :",
+    HEALTH_TIPS: {
+      underweight: "CON Inama : Fata ibiryo biryoshye, ongeramo kalori, wasanga umuganga w'imirire.\n0. Subira inyuma\n\nHitamo nimero :",
+      normal: "CON Inama : Komeza kurya ibiryo biringanije, korikora imyirambere, unywe amazi ahagije.\n0. Subira inyuma\n\nHitamo nimero :",
+      overweight: "CON Inama : Gukuramo kalori, ongeramo imyirambere, wasanga umuganga.\n0. Subira inyuma\n\nHitamo nimero :",
+      obese: "CON Inama : Sura umuganga, tangira kurya ibiryo by'ubuzima, korikora imyirambere ufashijwe.\n0. Subira inyuma\n\nHitamo nimero :"
+    },
+    INVALID: "END Injiza nabi. Kanda * ukongere utangire.",
+    INVALID_CHOICE: "END Guhitamo nabi. Kanda * ukongere utangire.",
+    ERROR: "END Sisitemu iri mu bikorwa byo kuyisana. Ongera ugerageze nyuma.",
+    BACK: "Subira inyuma",
+    CHOOSE: "Hitamo nimero :"
+  }
 };
 
-// Load dish list with error handling
-let dishes;
-try {
-    dishes = JSON.parse(fs.readFileSync('./dishesList.json', 'utf8'));
-    if (!dishes.english || !dishes.kinyarwanda || !dishes.english.healthy || !dishes.english.unhealthy ||
-        !dishes.kinyarwanda.healthy || !dishes.kinyarwanda.unhealthy) {
-        throw new Error('Invalid dishesList.json structure');
-    }
-} catch (err) {
-    console.error('Error reading or validating dishesList.json:', err);
-    dishes = {
-        english: { healthy: [], unhealthy: [] },
-        kinyarwanda: { healthy: [], unhealthy: [] }
-    };
-}
-
-const ITEMS_PER_PAGE = 5;
+// In-memory session storage
+const sessions = {};
 
 const server = http.createServer((req, res) => {
-    if (req.method === 'POST') {
-        let body = '';
-        req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => {
-            try {
-                const parsedBody = querystring.parse(body);
-                const text = (parsedBody.text || "").trim();
-                const input = text.split("*").filter(segment => segment.match(/^[0-9]+$/));
-                
-                console.log('Received text:', text, 'Parsed input:', input);
-                
-                let response = processUSSDFlow(input);
-                
-                res.writeHead(200, { 'Content-Type': 'text/plain' });
-                res.end(response);
-            } catch (error) {
-                console.error('Unhandled system error:', error);
-                res.writeHead(200, { 'Content-Type': 'text/plain' });
-                res.end(MESSAGES.english.ERROR);
-            }
-        });
-    } else {
-        res.writeHead(200);
-        res.end("USSD service running.");
-    }
+  if (req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const parsedBody = querystring.parse(body);
+        const text = (parsedBody.text || "").trim();
+        const sessionId = parsedBody.sessionId || Date.now().toString();
+        const phoneNumber = parsedBody.phoneNumber || 'unknown';
+        const input = text.split("*").filter(segment => segment.match(/^[0-9]+$/));
+
+        console.log('Received text:', text, 'Parsed input:', input, 'Session ID:', sessionId);
+
+        let response = processUSSDFlow(input, sessionId, phoneNumber);
+
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(response);
+      } catch (error) {
+        console.error('Unhandled system error:', error);
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(MESSAGES.french.ERROR);
+      }
+    });
+  } else {
+    res.writeHead(200);
+    res.end("USSD BMI Calculator service running.");
+  }
 });
 
-function processUSSDFlow(input) {
-    // Empty input - show welcome screen
-    if (input.length === 0) {
-        console.log('Showing welcome screen');
-        return MESSAGES.english.WELCOME;
+function processUSSDFlow(input, sessionId, phoneNumber) {
+  // Initialize session if not exists
+  if (!sessions[sessionId]) {
+    sessions[sessionId] = {
+      state: 'welcome',
+      language: 'french',
+      weight: null,
+      height: null,
+      bmi: null,
+      category: null,
+      lastInputLevel: 0
+    };
+  }
+
+  const session = sessions[sessionId];
+
+  // Clean up old sessions (older than 30 minutes)
+  const now = Date.now();
+  for (const sid in sessions) {
+    if (now - (sessions[sid].lastActivity || now) > 30 * 60 * 1000) {
+      delete sessions[sid];
+    }
+  }
+  session.lastActivity = now;
+
+  // Empty input - show welcome screen
+  if (input.length === 0) {
+    console.log('Showing welcome screen');
+    session.state = 'welcome';
+    session.lastInputLevel = 0;
+    return MESSAGES.french.WELCOME;
+  }
+
+  // First level: Language selection
+  if (input.length === 1) {
+    const choice = input[0];
+    if (choice === "1") {
+      session.language = "french";
+      session.state = "weight";
+      session.lastInputLevel = 1;
+      console.log('Language selected: French');
+      return MESSAGES.french.ENTER_WEIGHT;
+    } else if (choice === "2") {
+      session.language = "kinyarwanda";
+      session.state = "weight";
+      session.lastInputLevel = 1;
+      console.log('Language selected: Kinyarwanda');
+      return MESSAGES.kinyarwanda.ENTER_WEIGHT;
+    } else {
+      console.log('Invalid language selection:', choice);
+      return MESSAGES.french.INVALID;
+    }
+  }
+
+  // Second level: Weight input or back
+  if (input.length === 2) {
+    const lang = session.language;
+    const choice = input[1];
+
+    if (choice === "0") {
+      console.log('Going back to welcome screen from weight input');
+      session.state = 'welcome';
+      session.lastInputLevel = 1;
+      return MESSAGES.french.WELCOME;
     }
 
-    // First level: Language selection
-    if (input.length === 1) {
-        const lang = input[0] === "1" ? "english" : input[0] === "2" ? "kinyarwanda" : null;
-        if (!lang) {
-            console.log('Invalid language selection:', input[0]);
-            return MESSAGES.english.INVALID;
-        }
-        console.log('Language selected:', lang);
-        return getMenu(lang, 0);
+    if (!isNaN(choice) && Number(choice) > 0) {
+      session.weight = parseFloat(choice);
+      session.state = 'height';
+      session.lastInputLevel = 2;
+      console.log('Weight entered:', session.weight);
+      return MESSAGES[lang].ENTER_HEIGHT;
+    } else {
+      console.log('Invalid weight input:', choice);
+      return MESSAGES[lang].INVALID;
+    }
+  }
+
+  // Third level: Height input or back
+  if (input.length === 3) {
+    const lang = session.language;
+    const prevChoice = input[1];
+    const choice = input[2];
+
+    if (prevChoice === "0") {
+      // Handle back from weight input, treat choice as language selection
+      if (choice === "1") {
+        session.language = "french";
+        session.state = "weight";
+        session.lastInputLevel = 2;
+        console.log('Language selected after back: French');
+        return MESSAGES.french.ENTER_WEIGHT;
+      } else if (choice === "2") {
+        session.language = "kinyarwanda";
+        session.state = "weight";
+        session.lastInputLevel = 2;
+        console.log('Language selected after back: Kinyarwanda');
+        return MESSAGES.kinyarwanda.ENTER_WEIGHT;
+      } else {
+        console.log('Invalid language selection after back:', choice);
+        return MESSAGES.french.INVALID;
+      }
     }
 
-    // Second level: Menu navigation
-    if (input.length === 2) {
-        const lang = input[0] === "1" ? "english" : "kinyarwanda";
-        const choice = parseInt(input[1]);
-        
-        if (isNaN(choice)) {
-            console.log('Invalid choice at level 2:', input[1]);
-            return MESSAGES[lang].INVALID;
-        }
-
-        if (choice === 0) {
-            console.log('Going back to welcome screen from first menu');
-            return MESSAGES.english.WELCOME;
-        }
-
-        if (choice === 6) {
-            console.log('Navigating to next page (page 1)');
-            return getMenu(lang, 1);
-        }
-
-        console.log('Selecting dish from page 0, choice:', choice);
-        return selectDish(lang, choice, 0);
+    if (choice === "0") {
+      console.log('Going back to weight input from height input');
+      session.state = 'weight';
+      session.lastInputLevel = 2;
+      return MESSAGES[lang].ENTER_WEIGHT;
     }
 
-    // Third level: Handle navigation after back, pagination, or dish selection
-    if (input.length === 3) {
-        const lang = input[0] === "1" ? "english" : "kinyarwanda";
-        const prevChoice = parseInt(input[1]);
-        const currentChoice = parseInt(input[2]);
+    if (!isNaN(choice) && Number(choice) > 0) {
+      session.height = parseFloat(choice);
+      // Calculate BMI
+      const heightM = session.height / 100;
+      const bmi = (session.weight / (heightM * heightM)).toFixed(1);
+      // Determine category
+      let category, categoryTranslated;
+      if (bmi < 18.5) {
+        category = 'underweight';
+        categoryTranslated = lang === 'kinyarwanda' ? 'Ibiro bike' : 'Insuffisance pondérale';
+      } else if (bmi >= 18.5 && bmi < 25) {
+        category = 'normal';
+        categoryTranslated = lang === 'kinyarwanda' ? 'Bisanzwe' : 'Normal';
+      } else if (bmi >= 25 && bmi < 30) {
+        category = 'overweight';
+        categoryTranslated = lang === 'kinyarwanda' ? 'Ibiro byinshi' : 'Surpoids';
+      } else {
+        category = 'obese';
+        categoryTranslated = lang === 'kinyarwanda' ? 'Umunani' : 'Obésité';
+      }
+      session.bmi = bmi;
+      session.category = category;
+      session.state = 'result';
+      session.lastInputLevel = 3;
+      console.log('Height entered:', session.height, 'BMI:', bmi, 'Category:', category);
+      return MESSAGES[lang].BMI_RESULT.replace('%s', bmi).replace('%s', categoryTranslated);
+    } else {
+      console.log('Invalid height input:', choice);
+      return MESSAGES[lang].INVALID;
+    }
+  }
 
-        if (isNaN(prevChoice) || isNaN(currentChoice)) {
-            console.log('Invalid input at level 3:', input[1], input[2]);
-            return MESSAGES[lang].INVALID;
+  // Fourth level: Health tips or back
+  if (input.length === 4) {
+    const lang = session.language;
+    const prevPrevChoice = input[1]; // Weight or back
+    const prevChoice = input[2]; // Height or language
+    const choice = input[3];
+
+    // Handle back from weight input (prevPrevChoice === "0")
+    if (prevPrevChoice === "0") {
+      // prevChoice is language, choice is weight or back
+      if (prevChoice === "1" || prevChoice === "2") {
+        const newLang = prevChoice === "1" ? "french" : "kinyarwanda";
+        if (choice === "0") {
+          console.log('Going back to welcome screen from weight input after back');
+          session.state = 'welcome';
+          session.lastInputLevel = 3;
+          return MESSAGES.french.WELCOME;
         }
-
-        // If previous choice was Back (0), treat currentChoice as a new language selection
-        if (prevChoice === 0) {
-            const newLang = currentChoice === 1 ? "english" : currentChoice === 2 ? "kinyarwanda" : null;
-            if (!newLang) {
-                console.log('Invalid language selection after back:', currentChoice);
-                return MESSAGES.english.INVALID;
-            }
-            console.log('Language selected after back:', newLang);
-            return getMenu(newLang, 0);
+        if (!isNaN(choice) && Number(choice) > 0) {
+          session.language = newLang;
+          session.weight = parseFloat(choice);
+          session.state = 'height';
+          session.lastInputLevel = 3;
+          console.log('Weight entered after back:', session.weight, 'Language:', newLang);
+          return MESSAGES[newLang].ENTER_HEIGHT;
+        } else {
+          console.log('Invalid weight input after back:', choice);
+          return MESSAGES[newLang].INVALID;
         }
-
-        // Determine the page based on previous choice
-        const page = prevChoice === 6 ? 1 : 0;
-
-        // If previous choice was a dish selection (1–5), handle back
-        if ((prevChoice >= 1 && prevChoice <= 5) && currentChoice === 0) {
-            console.log('Going back to menu page', page, 'after dish selection');
-            return getMenu(lang, page);
-        }
-
-        if (currentChoice === 0) {
-            if (page === 1) {
-                console.log('Going back to first menu page (page 0)');
-                return getMenu(lang, 0);
-            } else {
-                console.log('Going back to welcome screen from page 0');
-                return MESSAGES.english.WELCOME;
-            }
-        }
-
-        if (currentChoice === 6) {
-            console.log('Navigating to next page (page', page + 1, ')');
-            return getMenu(lang, page + 1);
-        }
-
-        console.log('Selecting dish from page', page, 'choice:', currentChoice);
-        return selectDish(lang, currentChoice, page);
+      }
     }
 
-    // Fourth level: Handle navigation after back to welcome screen or dish selection
-    if (input.length === 4) {
-        const firstInput = input[0];
-        const secondInput = parseInt(input[1]);
-        const thirdInput = parseInt(input[2]);
-        const fourthInput = parseInt(input[3]);
-
-        if (isNaN(secondInput) || isNaN(thirdInput) || isNaN(fourthInput)) {
-            console.log('Invalid input at level 4:', input[1], input[2], input[3]);
-            return MESSAGES.english.INVALID;
-        }
-
-        // If second input was Back (0), treat third and fourth inputs as a new sequence (lang, choice)
-        if (secondInput === 0) {
-            const lang = thirdInput === 1 ? "english" : thirdInput === 2 ? "kinyarwanda" : null;
-            if (!lang) {
-                console.log('Invalid language selection at level 4:', thirdInput);
-                return MESSAGES.english.INVALID;
-            }
-
-            if (fourthInput === 0) {
-                console.log('Going back to welcome screen from first menu after back');
-                return MESSAGES.english.WELCOME;
-            }
-
-            if (fourthInput === 6) {
-                console.log('Navigating to next page (page 1) after back');
-                return getMenu(lang, 1);
-            }
-
-            // Handle back after dish selection
-            if ((fourthInput >= 1 && fourthInput <= 5) && fourthInput === 0) {
-                console.log('Going back to menu page 0 after dish selection at level 4');
-                return getMenu(lang, 0);
-            }
-
-            console.log('Selecting dish from page 0, choice:', fourthInput, 'after back');
-            return selectDish(lang, fourthInput, 0);
-        }
-
-        // If third input was a dish selection, handle back
-        const lang = firstInput === "1" ? "english" : "kinyarwanda";
-        const page = secondInput === 6 ? 1 : 0;
-
-        if ((thirdInput >= 1 && thirdInput <= 5) && fourthInput === 0) {
-            console.log('Going back to menu page', page, 'after dish selection at level 4');
-            return getMenu(lang, page);
-        }
-
-        console.log('Invalid sequence at level 4:', input);
+    // Handle back from height input
+    if (prevChoice === "0") {
+      if (choice === "0") {
+        console.log('Going back to welcome screen from weight input after back from height');
+        session.state = 'welcome';
+        session.lastInputLevel = 3;
+        return MESSAGES.french.WELCOME;
+      }
+      if (!isNaN(choice) && Number(choice) > 0) {
+        session.weight = parseFloat(choice);
+        session.state = 'height';
+        session.lastInputLevel = 3;
+        console.log('Weight re-entered after back:', session.weight);
+        return MESSAGES[lang].ENTER_HEIGHT;
+      } else {
+        console.log('Invalid weight input after back from height:', choice);
         return MESSAGES[lang].INVALID;
+      }
     }
 
-    console.log('Invalid input length:', input.length);
-    return MESSAGES.english.INVALID;
-}
-
-function getMenu(lang, page) {
-    const allDishes = [...dishes[lang].healthy, ...dishes[lang].unhealthy];
-    if (allDishes.length === 0) {
-        console.log('No dishes available for language:', lang);
-        return MESSAGES[lang].NO_DISHES;
+    // Handle result screen choices
+    if (choice === "0") {
+      console.log('Going back to height input from result screen');
+      session.state = 'height';
+      session.lastInputLevel = 3;
+      return MESSAGES[lang].ENTER_HEIGHT;
     }
 
-    const start = page * ITEMS_PER_PAGE;
-    const items = allDishes.slice(start, start + ITEMS_PER_PAGE);
-    
-    if (items.length === 0) {
-        console.log('No more dishes on page:', page);
-        return MESSAGES[lang].NO_DISHES;
+    if (choice === "1") {
+      session.state = 'tips';
+      session.lastInputLevel = 4;
+      console.log('Displaying health tips for category:', session.category);
+      return MESSAGES[lang].HEALTH_TIPS[session.category];
+    } else {
+      console.log('Invalid choice on result screen:', choice);
+      return MESSAGES[lang].INVALID_CHOICE;
     }
-    
-    let menuItems = [`0. ${MESSAGES[lang].BACK}`];
-    items.forEach((dish, i) => {
-        menuItems.push(`${i + 1}. ${capitalize(dish)}`);
-    });
-    
-    const hasMore = start + ITEMS_PER_PAGE < allDishes.length;
-    if (hasMore) {
-        menuItems.push(`6. ${MESSAGES[lang].MORE}`);
+  }
+
+  // Fifth level: Back from health tips
+  if (input.length === 5) {
+    const lang = session.language;
+    const prevPrevPrevChoice = input[1]; // Weight or back
+    const prevPrevChoice = input[2]; // Height or language
+    const prevChoice = input[3]; // Result screen choice
+    const choice = input[4];
+
+    // Handle back from weight input
+    if (prevPrevPrevChoice === "0") {
+      const newLang = prevPrevChoice === "1" ? "french" : "kinyarwanda";
+      if (prevChoice === "0") {
+        // Back from weight input after language selection
+        if (choice === "0") {
+          console.log('Going back to welcome screen from weight input after multiple backs');
+          session.state = 'welcome';
+          session.lastInputLevel = 4;
+          return MESSAGES.french.WELCOME;
+        }
+        if (!isNaN(choice) && Number(choice) > 0) {
+          session.language = newLang;
+          session.weight = parseFloat(choice);
+          session.state = 'height';
+          session.lastInputLevel = 4;
+          console.log('Weight entered after multiple backs:', session.weight);
+          return MESSAGES[newLang].ENTER_HEIGHT;
+        } else {
+          console.log('Invalid weight input after multiple backs:', choice);
+          return MESSAGES[newLang].INVALID;
+        }
+      }
     }
-    
-    const menu = menuItems.join("\n");
-    console.log('Displaying menu for', lang, 'page:', page, '\n', menu);
-    return `CON ${menu}\n\n${MESSAGES[lang].CHOOSE}`;
-}
 
-function selectDish(lang, choice, page) {
-    console.log('selectDish called with lang:', lang, 'choice:', choice, 'page:', page);
-    
-    const allDishes = [...dishes[lang].healthy, ...dishes[lang].unhealthy];
-    const start = page * ITEMS_PER_PAGE;
-    const items = allDishes.slice(start, start + ITEMS_PER_PAGE);
-    const dishIndex = start + choice - 1;
+    // Handle back from height input
+    if (prevPrevChoice === "0") {
+      if (prevChoice === "0") {
+        if (choice === "0") {
+          console.log('Going back to welcome screen from weight input after back from height');
+          session.state = 'welcome';
+          session.lastInputLevel = 4;
+          return MESSAGES.french.WELCOME;
+        }
+        if (!isNaN(choice) && Number(choice) > 0) {
+          session.weight = parseFloat(choice);
+          session.state = 'height';
+          session.lastInputLevel = 4;
+          console.log('Weight re-entered after back from height:', session.weight);
+          return MESSAGES[lang].ENTER_HEIGHT;
+        } else {
+          console.log('Invalid weight input after back from height:', choice);
+          return MESSAGES[lang].INVALID;
+        }
+      }
+    }
 
-    console.log('All dishes:', allDishes, 'Start index:', start, 'Items on page:', items, 'Dish index:', dishIndex);
-
-    if (choice < 1 || choice > items.length || !allDishes[dishIndex]) {
-        console.log('Invalid dish choice:', choice, 'on page:', page, 'items length:', items.length);
+    // Handle back from result screen
+    if (prevChoice === "0") {
+      if (choice === "0") {
+        console.log('Going back to height input from result screen after back');
+        session.state = 'height';
+        session.lastInputLevel = 4;
+        return MESSAGES[lang].ENTER_HEIGHT;
+      } else {
+        console.log('Invalid choice after back from result screen:', choice);
         return MESSAGES[lang].INVALID_CHOICE;
+      }
     }
-    
-    const chosen = allDishes[dishIndex];
-    const isHealthy = dishes[lang].healthy.includes(chosen);
-    
-    const response = `CON ${capitalize(chosen)} ${lang === "english" ? 
-        (isHealthy ? "is a healthy dish" : "is not a healthy dish") : 
-        (isHealthy ? "ni ifunguro ryiza ku buzima" : "si ifunguro ryiza ku buzima")}.\n0. ${MESSAGES[lang].BACK}\n\n${MESSAGES[lang].CHOOSE}`;
-    
-    console.log('Dish selected:', chosen, 'Healthy:', isHealthy, 'Response:', response);
-    return response;
-}
 
-function capitalize(str) {
-    if (!str) return "";
-    return str.charAt(0).toUpperCase() + str.slice(1);
+    // Handle back from tips screen
+    if (choice === "0") {
+      console.log('Going back to result screen from tips');
+      session.state = 'result';
+      session.lastInputLevel = 4;
+      return MESSAGES[lang].BMI_RESULT.replace('%s', session.bmi).replace('%s', lang === 'kinyarwanda' ? 
+        (session.category === 'underweight' ? 'Ibiro bike' : session.category === 'normal' ? 'Bisanzwe' : session.category === 'overweight' ? 'Ibiro byinshi' : 'Umunani') :
+        (session.category === 'underweight' ? 'Insuffisance pondérale' : session.category === 'normal' ? 'Normal' : session.category === 'overweight' ? 'Surpoids' : 'Obésité'));
+    } else {
+      console.log('Invalid choice on tips screen:', choice);
+      return MESSAGES[lang].INVALID_CHOICE;
+    }
+  }
+
+  console.log('Invalid input length:', input.length);
+  return MESSAGES.french.INVALID;
 }
 
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
-    console.log(`✅ USSD Dishes app is running on port ${PORT}`);
+  console.log(`✅ USSD BMI Calculator app is running on port ${PORT}`);
 });
